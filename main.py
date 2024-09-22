@@ -1,11 +1,17 @@
 #DATOS DE LA REALIDAD
+import logging
 from typing import List
-from scipy.stats import levy_stable, gamma, lognorm, geninvgauss, exponweib
+from scipy.stats import gamma, lognorm, norm, geninvgauss, exponweib, halfgennorm
 import random
+import math
 
 PC : float = 0 # Porcentaje de compras
 HV : int = 10**18
+MAX_CLICKS_POR_SEGUNDO_PARA_MATAR_DOMINIO = 0.2
 SEGUNDOS_EN_UNA_SEMANA : int = 60*60*24*7
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 ## BEST FIT FOR CLICKS PER DAY{'rayleigh': {'loc': -33.39920383559722, 'scale': 143.2873228044864}}
 best_fits = {
@@ -17,8 +23,8 @@ best_fits = {
             'loc': -13.743531404179322,
             'scale': 79.7246922914876
         },
-        'max': 1207,
-        'min': 1
+        'max': 3600,
+        'min': 3600.0 / 1207.0
     },
     'CA': { # Costo adquisicion
         'dist': {
@@ -38,16 +44,14 @@ best_fits = {
             'loc': 1.999993712399898,
             'scale': 3.7061185422875864
         },
-        'max': 32.72869286435422,
-        'min': 2.0000621696849827
+        'max': 32.72869286435422*60*60,
+        'min': 2.0000621696849827*60*60
     },
     'CR': { # Costo rotacion
         'dist': {
-            'name': 'levy_stable',
-            'alpha': 2.0,
-            'beta': 1.0,
-            'loc': 38.74398740006481,
-            'scale': 10.382470533203918
+            'name': 'norm',
+            'loc': 1.96601667004689,
+            'scale': 0.8585616134471116
         },
         'max': 96.00619072342832,
         'min': 3.1380802068300326
@@ -75,10 +79,10 @@ def fdp_acumulada_inversa_tiempo_activacion(x):
     return exponweib.ppf(x, a=data['a'], c=data['c'], loc=data['loc'], scale=data['scale'])*60*60
 def fdp_acumulada_inversa_costo_rotacion(x):
     data = best_fits['CR']['dist']
-    return levy_stable.ppf(x, alpha=data['alpha'], beta=data['beta'], loc=data['loc'], scale=data['scale'])
+    return norm.ppf(x,loc=data['loc'], scale=data['scale'])
 def fdp_acumulada_inversa_clicks(x):
     data = best_fits['IC']['dist']
-    return geninvgauss.ppf(x, p=data['p'], b=data['b'], loc=data['loc'], scale=data['scale'])/(60*60)
+    return math.floor(3600 / geninvgauss.ppf(x, p=data['p'], b=data['b'], loc=data['loc'], scale=data['scale']))
 
 # Eventos posibles
 def proximo_evento(TPA, TPR, TPC):
@@ -89,7 +93,7 @@ def proximo_evento(TPA, TPR, TPC):
     elif TPC <= TPR:
         return "CLICK"
     else:
-        "ROTACION"
+        return "ROTACION"
 
 def generar(valor: str) -> float:
 
@@ -138,7 +142,7 @@ def iniciar_simulacion(IR, ND, TF):
     ITO : List[int] = [] # Instante de comienzo de tiempo ocioso
 
     for i in range(ND):
-        TA.append(HV)
+        TA.append(0)
         TV.append(generar('IV'))
         NC.append(0)
         ITO.append(0)
@@ -150,6 +154,7 @@ def iniciar_simulacion(IR, ND, TF):
             IC = generar('IC')
             TPC = TPC + IC
             if TV[DA] < T or TA[DA] > T:
+                logger.debug(f'CLICK RECHAZADO! EN {T}s')
                 NCR += 1
             else:
                 NC[DA] += 1
@@ -157,6 +162,7 @@ def iniciar_simulacion(IR, ND, TF):
                 if NC[DA] / (T - IUA) >= 500:
                     TPR = T
         elif evento == "ROTACION":
+            #logger.debug(f'ROTACION! EN {T}s')
             T = TPR
             CR = generar('CR')
             SCR = SCR + CR
@@ -170,16 +176,20 @@ def iniciar_simulacion(IR, ND, TF):
                 elif i == DA:
                     TPA = T
                     break
-                if TV[i] < T or TA[i] > T:
+                if TV[i] < T:
                     TPA = T
+                    continue
+                elif TA[i] > T: ## Todavia no se activó, sigo pero no lo mando a activar
                     continue
                 else:
                     IUA = T
                     STO = STO + (T - ITO[i])
                     ITO[DA] = T
                     DA = i
+                    NC[DA] = 0
                     break
         elif evento == "ADQUISICION":
+            logger.debug(f'ADQUICISION! EN {T}s. PCNP ACTUAL: {100 * NCR / (NCR+NCV)}')
             T = TPA
             CA = generar('CA')
             SCA += CA
@@ -188,11 +198,15 @@ def iniciar_simulacion(IR, ND, TF):
                     TV[i] = T + generar('IV')
                     TA[i] = T + generar('IA')
                     ITO[i] = TA[i]
+            TPA = HV
+        else:
+            raise "INVALID EVENT"
     # Calculo
-    PTO = 100 * STO / T
+    PTO = 100 * STO / (ND * T)
     PCNP = 100 * NCR / (NCR+NCV)
     PCDS = (SCA + SCR) / (T / SEGUNDOS_EN_UNA_SEMANA)
-    PCP = PCNP * PC
+    PCP = PCNP * PC/100.0
+    # PCP = NCR / (NCR+NCV) * PC
     # Salidas e impresiones
     print(f"PTO: {PTO}")
     print(f"PCNP: {PCNP}")
@@ -207,11 +221,11 @@ def calculate_weight(pto, pcnp, pcds):
     return (peso_pto/pto + peso_pcnp/pcnp + peso_pcds/pcds )/ 3.0
 
 def main():
-    TF = 60*60*24*30 # 1 MONTH
+    TF = 30*24*60*60
     IR = 2 * 60 * 60
     ND = 5
-    test_fdp()
-    # iniciar_simulacion(IR,ND,TF)
+    #test_fdp()
+    iniciar_simulacion(IR,ND,TF)
 
 
 
@@ -245,6 +259,9 @@ def calculate_best(TF):
 
     print(f'BEST OUTCOME: {better}')
 
+def probar_casos():
+    valores_ir = [2, 6, 24]
+    valores_nd = [2, 4, 6, 10]
 
 def test_fdp():
     variables_a_generar = ['IC','CA','IA','CR','IV']
