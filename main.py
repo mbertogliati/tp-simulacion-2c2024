@@ -5,7 +5,7 @@ from scipy.stats import gamma, lognorm, norm, geninvgauss, exponweib, halfgennor
 import random
 import math
 
-PC : float = 0 # Porcentaje de compras
+PC : float = 0.36 # Porcentaje de compras
 HV : int = 10**18
 MAX_CLICKS_POR_SEGUNDO_PARA_MATAR_DOMINIO = 0.2
 SEGUNDOS_EN_UNA_SEMANA : int = 60*60*24*7
@@ -159,7 +159,8 @@ def iniciar_simulacion(IR, ND, TF):
             else:
                 NC[DA] += 1
                 NCV += 1
-                if NC[DA] / (T - IUA) >= 500:
+                if (T - IUA > 0) and (NC[DA] / (T - IUA) >= MAX_CLICKS_POR_SEGUNDO_PARA_MATAR_DOMINIO):
+                    logger.debug(f'BOTS! EN {T}s CON {NC[DA] / (T - IUA)} CLICKS POR SEGUNDO')
                     TPR = T
         elif evento == "ROTACION":
             #logger.debug(f'ROTACION! EN {T}s')
