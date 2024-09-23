@@ -1,9 +1,11 @@
 #DATOS DE LA REALIDAD
+import datetime
 import logging
 from typing import List
 from scipy.stats import gamma, lognorm, norm, geninvgauss, exponweib, halfgennorm
 import random
 import math
+import numpy as np
 
 PC : float = 0.36 # Porcentaje de compras
 HV : int = 10**18
@@ -50,11 +52,11 @@ best_fits = {
     'CR': { # Costo rotacion
         'dist': {
             'name': 'norm',
-            'loc': 1.96601667004689,
-            'scale': 0.8585616134471116
+            'loc': 0.6719322577435679,
+            'scale': 0.25438600898049996
         },
-        'max': 3.49470279362471,
-        'min': 0.5043013954580986
+        'max': 1.0997537823773031,
+        'min': 0.2139011018423042
     },
     'IV': {
         'dist': {
@@ -67,7 +69,16 @@ best_fits = {
         'min': 10810
     }
 }
+# Precompute values for geninvgauss.ppf from 0 to 1 with step 0.00001
+x_values = np.arange(0, 1, 0.001)
+precomputed_values_click = 3600 / geninvgauss.ppf(x_values, p=best_fits['IC']['dist']['p'], b=best_fits['IC']['dist']['b'], loc=best_fits['IC']['dist']['loc'], scale=best_fits['IC']['dist']['scale'])
+precomputed_values_click = np.floor(precomputed_values_click)  # Apply the flooring to the results
 
+# Function to lookup precomputed value based on random x
+def fdp_acumulada_inversa_clicks(x):
+    # Scale x to the range of precomputed indices (0 to len(precomputed_ppf) - 1)
+    index = min(int(x * len(precomputed_values_click)), len(precomputed_values_click) - 1)
+    return precomputed_values_click[index]
 def fdp_acumulada_inversa_costo_adquisicion(x):
     data = best_fits['CA']['dist']
     return gamma.ppf(x, a=data['a'], loc=data['loc'], scale=data['scale'])
@@ -80,10 +91,6 @@ def fdp_acumulada_inversa_tiempo_activacion(x):
 def fdp_acumulada_inversa_costo_rotacion(x):
     data = best_fits['CR']['dist']
     return norm.ppf(x,loc=data['loc'], scale=data['scale'])
-def fdp_acumulada_inversa_clicks(x):
-    data = best_fits['IC']['dist']
-    return math.floor(3600 / geninvgauss.ppf(x, p=data['p'], b=data['b'], loc=data['loc'], scale=data['scale']))
-
 # Eventos posibles
 def proximo_evento(TPA, TPR, TPC):
     if TPA <= TPR:
@@ -172,15 +179,14 @@ def iniciar_simulacion(IR, ND, TF):
             while True:
                 i = i + 1
                 if i >= ND:
-                    i = 0
+                    i = -1
                     continue
                 elif i == DA:
-                    TPA = T
                     break
                 if TV[i] < T:
                     TPA = T
                     continue
-                elif TA[i] > T: ## Todavia no se activó, sigo pero no lo mando a activar
+                elif TA[i] > T: ## Todavia no se activó, sigo pero no lo mando a activar porque eso ya se hizo
                     continue
                 else:
                     IUA = T
@@ -190,14 +196,14 @@ def iniciar_simulacion(IR, ND, TF):
                     NC[DA] = 0
                     break
         elif evento == "ADQUISICION":
-            logger.debug(f'ADQUICISION! EN {T}s. PCNP ACTUAL: {100 * NCR / (NCR+NCV)}')
+            logger.debug(f'ADQUISICION! EN {T}s. PCNP ACTUAL: {100 * NCR / (NCR+NCV)}')
             T = TPA
             CA = generar('CA')
             SCA += CA
             for i in range(ND):
                 if TV[i] < T:
-                    TV[i] = T + generar('IV')
                     TA[i] = T + generar('IA')
+                    TV[i] = TA[i] + generar('IV')
                     ITO[i] = TA[i]
             TPA = HV
         else:
@@ -207,13 +213,24 @@ def iniciar_simulacion(IR, ND, TF):
     PCNP = 100 * NCR / (NCR+NCV)
     PCDS = (SCA + SCR) / (T / SEGUNDOS_EN_UNA_SEMANA)
     PCP = PCNP * PC/100.0
+
+    logger.debug(f"STO: {STO}")
+    logger.debug(f"NCR: {NCR}")
+    logger.debug(f"NCV: {NCV}")
+    logger.debug(f"SCA: {SCA}")
+    logger.debug(f"SCR: {SCR}")
+
     # PCP = NCR / (NCR+NCV) * PC
     # Salidas e impresiones
+    print('### RESULTADOS ###')
     print(f"PTO: {PTO}")
     print(f"PCNP: {PCNP}")
     print(f"PCDS: {PCDS}")
     print(f"PCP: {PCP}")
-    return {'PTO': PTO, 'PCNP': PCNP, 'PCDS': PCDS, 'PCP': PCP}
+    print(f"SCA: {SCA}")
+    print(f"SCR: {SCR}")
+    print('##################\n')
+    return {'PTO': PTO, 'PCNP': PCNP, 'PCDS': PCDS, 'PCP': PCP, 'SCA': PCADS, 'SCR': PCRDS}
 
 def calculate_weight(pto, pcnp, pcds):
     peso_pto = 20
@@ -226,8 +243,8 @@ def main():
     IR = 2 * 60 * 60
     ND = 5
     #test_fdp()
-    iniciar_simulacion(IR,ND,TF)
-
+    #iniciar_simulacion(IR,ND,TF)
+    probar_casos()
 
 
 def calculate_best(TF):
@@ -261,8 +278,22 @@ def calculate_best(TF):
     print(f'BEST OUTCOME: {better}')
 
 def probar_casos():
-    valores_ir = [2, 6, 24]
-    valores_nd = [2, 4, 6, 10]
+    valores_ir = [2, 3, 9]
+    valores_nd = [1, 2, 6, 10]
+    TF = 24*30*24*60*60 # 24 MESES
+    for ir in valores_ir:
+        for nd in valores_nd:
+            resultado_simulacion = iniciar_simulacion(ir*60*60,nd,TF)
+            resultado = {
+                    'date': str(datetime.datetime.now()),
+                    'resultado': resultado_simulacion,
+                    'ir': ir,
+                    'nd': nd,
+                    'tf': TF,
+                }
+            with open('./resultados.txt', 'a') as file:
+                file.write(f'{resultado}\n')
+
 
 def test_fdp():
     variables_a_generar = ['IC','CA','IA','CR','IV']
