@@ -2,11 +2,11 @@ from fitter import Fitter
 import pandas as pd
 from datetime import datetime, timedelta
 
-datos = [#'CLICKS_POR_HORA_Y_POR_DIA.csv',
+datos = ['CLICKS_POR_HORA_Y_POR_DIA.csv',
          'datos_costos_rotacion.csv',
-         #'datos_costos_adquisicion.csv',
-         #'datos_tiempo_activacion.csv',
-         #'datos_tiempo_vida.csv'
+         'datos_costos_adquisicion.csv',
+         'datos_tiempo_activacion.csv',
+         'datos_tiempo_vida.csv'
          ]
 datos_demora_adquisicion = ""
 datos_vida_util_dominio = ""
@@ -16,7 +16,7 @@ def imprimir_distribuciones():
         df = pd.read_csv(file)
         sample = df['data']
 
-        f = Fitter(sample, distributions=['norm'])
+        f = Fitter(sample)
         f.fit(progress=False)
 
         ## Obtener mejor distribución

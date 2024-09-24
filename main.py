@@ -69,16 +69,10 @@ best_fits = {
         'min': 10810
     }
 }
-# Precompute values for geninvgauss.ppf from 0 to 1 with step 0.00001
-x_values = np.arange(0, 1, 0.001)
-precomputed_values_click = 3600 / geninvgauss.ppf(x_values, p=best_fits['IC']['dist']['p'], b=best_fits['IC']['dist']['b'], loc=best_fits['IC']['dist']['loc'], scale=best_fits['IC']['dist']['scale'])
-precomputed_values_click = np.floor(precomputed_values_click)  # Apply the flooring to the results
 
-# Function to lookup precomputed value based on random x
 def fdp_acumulada_inversa_clicks(x):
-    # Scale x to the range of precomputed indices (0 to len(precomputed_ppf) - 1)
-    index = min(int(x * len(precomputed_values_click)), len(precomputed_values_click) - 1)
-    return precomputed_values_click[index]
+    data = best_fits['IC']['dist']
+    return 3600 / geninvgauss.ppf(x, p=data['p'], b=data['b'], loc=data['loc'], scale=data['scale'])
 def fdp_acumulada_inversa_costo_adquisicion(x):
     data = best_fits['CA']['dist']
     return gamma.ppf(x, a=data['a'], loc=data['loc'], scale=data['scale'])
