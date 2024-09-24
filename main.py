@@ -232,7 +232,7 @@ def iniciar_simulacion(IR, ND, TF):
     print(f"SCA: {SCA}")
     print(f"SCR: {SCR}")
     print('##################\n')
-    return {'PTO': PTO, 'PCNP': PCNP, 'PCDS': PCDS, 'PCP': PCP, 'SCA': PCADS, 'SCR': PCRDS}
+    return {'PTO': PTO, 'PCNP': PCNP, 'PCDS': PCDS, 'PCP': PCP}
 
 def calculate_weight(pto, pcnp, pcds):
     peso_pto = 20
@@ -281,13 +281,12 @@ def calculate_best(TF):
 
 def probar_casos():
     valores_ir = [2, 3, 9]
-    valores_nd = [1, 2, 6, 10]
-    TF = 24*30*24*60*60 # 24 MESES
+    valores_nd = [2, 6, 10]
+    TF = 5*120*30*24*60*60 # 120 MESES -> 10 AÑOS
     for ir in valores_ir:
         for nd in valores_nd:
             resultado_simulacion = iniciar_simulacion(ir*60*60,nd,TF)
             resultado = {
-                    'date': str(datetime.datetime.now()),
                     'resultado': resultado_simulacion,
                     'ir': ir,
                     'nd': nd,
