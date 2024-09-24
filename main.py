@@ -206,8 +206,6 @@ def iniciar_simulacion(IR, ND, TF):
     PTO = 100 * STO / (ND * T)
     PCNP = 100 * NCR / (NCR+NCV)
     PCDS = (SCA + SCR) / (T / SEGUNDOS_EN_UNA_SEMANA)
-    PCADS = (SCA) / (T / SEGUNDOS_EN_UNA_SEMANA)
-    PCRDS = (SCR) / (T / SEGUNDOS_EN_UNA_SEMANA)
     PCP = PCNP * PC/100.0
 
     logger.debug(f"STO: {STO}")
